@@ -1,0 +1,3 @@
+#clang deps/lodepng/lodepng.c -Ideps/lodepng/ 
+clang++ main.cpp -Ideps/glfw-3.1/include/ -Ldeps/glfw-3.1/lib/ -lglew -lglfw -framework OpenGL && ./a.out
+
