@@ -1,3 +1,5 @@
+#include "lodepng/lodepng.h"
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
@@ -43,7 +45,7 @@ _GLCheckError(std::string const & where = "")
         count++;
     }
     if (count)
-        exit(0);
+        exit(EXIT_FAILURE);
 }
 
 static void
@@ -61,7 +63,7 @@ _GLEWInit()
     glewExperimental = true;
     if (GLenum r = glewInit() != GLEW_OK) {
         std::cerr << "Failed to initialize glew. Error = %s\n", glewGetErrorString(r);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     // Glew causes GL errors :(
     glGetError();
@@ -107,7 +109,7 @@ _GLLinkProgram(char const* vsSrc, char const* fsSrc) {
         glGetProgramInfoLog(program, infoLogLength, NULL, infoLog);
         std::cerr << "Shader link failed: " << infoLog << "\n";
         delete[] infoLog;
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     return program;
@@ -152,10 +154,12 @@ _LinkSTProgram()
         "uniform vec3      iResolution;           // viewport resolution (in pixels)\n"
         "uniform float     iGlobalTime;           // shader playback time (in seconds)\n"
         "//uniform vec4      iMouse;                // mouse pixel coords. xy: current (if MLB down), zw: click\n"
-        "//uniform sampler2D iChannel0;           // input channel. XX = 2D/Cube\n"
+        "uniform sampler2D iChannel0;           // input channel. XX = 2D/Cube\n"
 
         "//void main() {\n"
         "//  color = fragColor + vec4(vec3(iGlobalTime*.1), 1.0);\n"
+        "//  color = vec4(vec3(texture(iChannel0, vec2(uvCoord.x, 1-uvCoord.y), 0).r), 1);\n"
+        "//  color = vec4(vec3(uvCoord, 0), 1);\n"
         "//}\n";
 
     std::string line;
@@ -163,17 +167,19 @@ _LinkSTProgram()
     std::ifstream glslFile("dunes.glsl");
     ss << fsSrc;
     if (glslFile.is_open()) {
+        #if 1
         while (getline(glslFile,line)) {
             ss << line << "\n";
         }
+        #endif
         glslFile.close();
     }
 
     _shaderToy.program = _GLLinkProgram(vsSrc, ss.str().c_str());
     _shaderToy.iResolutionLoc = glGetUniformLocation(_shaderToy.program, "iResolution");
     _shaderToy.iGlobalTimeLoc = glGetUniformLocation(_shaderToy.program, "iGlobalTime");
-    //_shaderToy.iMouseLoc = glGetUniformLocation(_shaderToy.prog, "iMouse");
-    //_shaderToy.iChannel0Loc = glGetUniformLocation(_shaderToy.prog, "iChannel0");
+    _shaderToy.iChannel0Loc = glGetUniformLocation(_shaderToy.program, "iChannel0");
+    //_shaderToy.iMouseLoc = glGetUniformLocation(_shaderToy.program, "iMouse");
 }
 
 static void
@@ -218,11 +224,13 @@ _InitFBO(GLsizei width, GLsizei height)
     
     glBindRenderbuffer(GL_RENDERBUFFER, _rboDepth);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, width, height);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, _rboDepth);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                              GL_RENDERBUFFER, _rboDepth);
 
     glBindRenderbuffer(GL_RENDERBUFFER, _rboColor);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, _rboColor);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                              GL_RENDERBUFFER, _rboColor);
 
     _GLCheckError("FBO");
 
@@ -257,6 +265,38 @@ _InitFBO(GLsizei width, GLsizei height)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+static void
+_InitRandomTexture()
+{
+    std::vector<unsigned char> data;
+    std::vector<unsigned char> image; //the raw pixels
+    unsigned width, height;
+
+    // decode
+    lodepng::load_file(data, "tex12.png");
+    unsigned error = lodepng::decode(image, width, height, data, LCT_GREY, 8);
+
+    // if there's an error, display it
+    if(error) 
+        std::cerr << "decoder error " << error << ": " 
+                  << lodepng_error_text(error) << std::endl;
+
+    //the pixels are now in the vector "image", 4 bytes per pixel, ordered
+    //RGBARGBA..., use it as texture, draw it, ...
+
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glActiveTexture(GL_TEXTURE0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED,
+                 GL_UNSIGNED_BYTE, &image[0]);
+}
+
 /* -------------------------------------------------------------------------- */
 /* MAIN                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -287,6 +327,7 @@ int main(void)
         glfwTerminate();
         exit(EXIT_FAILURE);
     }
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
     glfwMakeContextCurrent(window);
 
     GLint major=0, minor=0;
@@ -298,6 +339,7 @@ int main(void)
     _GLEWInit();
     _GLInit();
     _InitFBO(widthFbo, heightFbo);
+    _InitRandomTexture();
 
     glfwSetKeyCallback(window, _KeyCallback);
     glfwSwapInterval(0);
@@ -314,6 +356,7 @@ int main(void)
 
         glUseProgram(_shaderToy.program);
         glUniform1f(_shaderToy.iGlobalTimeLoc, glfwGetTime());
+        glUniform1i(_shaderToy.iChannel0Loc, 0);
         glUniform3f(_shaderToy.iResolutionLoc, widthFbo, heightFbo, 1.0);
         glBindBuffer(GL_ARRAY_BUFFER, _quadBuffer);
         glEnableVertexAttribArray(0);

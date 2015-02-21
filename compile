@@ -1,3 +1,9 @@
-#clang deps/lodepng/lodepng.c -Ideps/lodepng/ 
-clang++ main.cpp -Ideps/glfw-3.1/include/ -Ldeps/glfw-3.1/lib/ -lglew -lglfw -framework OpenGL && ./a.out
+echo "Compiling LodePNG..."
+clang++ deps/lodepng/lodepng.cpp -Ideps/lodepng/ -c 
+
+echo "Compiling demo..."
+clang++ main.cpp -stdlib=libc++ -Ideps/glfw-3.1/include/ -Ideps -c 
+
+echo "Linking..."
+clang++ main.o lodepng.o -Ldeps/glfw-3.1/lib/ -lglew -lglfw -framework OpenGL && ./a.out
 

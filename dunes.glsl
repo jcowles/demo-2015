@@ -9,16 +9,16 @@ vec3 noised( in vec2 x )
     vec2 p = floor(x);
     vec2 f = fract(x);
     vec2 u = f*f*(3.0-2.0*f);
-    #if 1
+    #if 0
     float a = 0.1;
     float b = 0.2;
     float c = 0.9;
     float d = 0.5;
     #else
-	float a = texture2D(iChannel0,(p+vec2(0.5,0.5))/256.0,-100.0).x;
-	float b = texture2D(iChannel0,(p+vec2(1.5,0.5))/256.0,-100.0).x;
-	float c = texture2D(iChannel0,(p+vec2(0.5,1.5))/256.0,-100.0).x;
-	float d = texture2D(iChannel0,(p+vec2(1.5,1.5))/256.0,-100.0).x;
+	float a = texture(iChannel0, (p+vec2(0.5,0.5))/256.0, 0).x;
+	float b = texture(iChannel0, (p+vec2(1.5,0.5))/256.0, 0).x;
+	float c = texture(iChannel0, (p+vec2(0.5,1.5))/256.0, 0).x;
+	float d = texture(iChannel0, (p+vec2(1.5,1.5))/256.0, 0).x;
     #endif
 
 	return vec3(a+(b-a)*u.x+(c-a)*u.y+(a-b-c+d)*u.x*u.y,
@@ -181,11 +181,11 @@ vec3 camPath( float time )
 float fbm( vec2 p )
 {
     float f = 0.0;
-    #if 0
-    f += 0.5000*texture2D( iChannel0, p/256.0 ).x; p = m2*p*2.02;
-    f += 0.2500*texture2D( iChannel0, p/256.0 ).x; p = m2*p*2.03;
-    f += 0.1250*texture2D( iChannel0, p/256.0 ).x; p = m2*p*2.01;
-    f += 0.0625*texture2D( iChannel0, p/256.0 ).x;
+    #if 1
+    f += 0.5000*texture(iChannel0, p/256.0).x; p = m2*p*2.02;
+    f += 0.2500*texture(iChannel0, p/256.0).x; p = m2*p*2.03;
+    f += 0.1250*texture(iChannel0, p/256.0).x; p = m2*p*2.01;
+    f += 0.0625*texture(iChannel0, p/256.0).x;
     #endif
     return f/0.9375;
 }
