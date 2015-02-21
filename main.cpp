@@ -1,3 +1,5 @@
+#include "audio.h"
+
 #include "lodepng/lodepng.h"
 
 #include <GL/glew.h>
@@ -343,6 +345,8 @@ int main(void)
 
     glfwSetKeyCallback(window, _KeyCallback);
     glfwSwapInterval(0);
+
+    StartAudio();
     
     while (!glfwWindowShouldClose(window))
     {
@@ -372,7 +376,6 @@ int main(void)
         glBindFramebuffer(GL_READ_FRAMEBUFFER, _fbo);
         _GLCheckError("blitbind");
         glBlitFramebuffer(0,0,widthFbo,heightFbo,0,0,width,height,GL_COLOR_BUFFER_BIT,GL_LINEAR);
-        //glBlitFramebuffer(0,0,10,10,0,0,width,height,GL_COLOR_BUFFER_BIT,GL_LINEAR);
         _GLCheckError("blit");
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);

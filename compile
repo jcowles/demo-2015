@@ -3,7 +3,9 @@ clang++ deps/lodepng/lodepng.cpp -Ideps/lodepng/ -c
 
 echo "Compiling demo..."
 clang++ main.cpp -stdlib=libc++ -Ideps/glfw-3.1/include/ -Ideps -c 
+clang++ audio.cpp -stdlib=libc++ -Ideps/glfw-3.1/include/ -Ideps -c 
 
 echo "Linking..."
-clang++ main.o lodepng.o -Ldeps/glfw-3.1/lib/ -lglew -lglfw -framework OpenGL && ./a.out
+# `sdl-config --libs` for linux
+clang++ main.o audio.o lodepng.o -framework SDL -framework SDL_mixer -Ldeps/glfw-3.1/lib/ -lglew -lglfw -framework OpenGL && ./a.out
 
