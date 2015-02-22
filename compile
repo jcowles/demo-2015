@@ -1,5 +1,5 @@
-echo "Compiling LodePNG..."
-clang++ deps/lodepng/lodepng.cpp -Ideps/lodepng/ -c 
+#echo "Compiling LodePNG..."
+#clang++ deps/lodepng/lodepng.cpp -Ideps/lodepng/ -c 
 
 echo "Compiling demo..."
 clang++ main.cpp -stdlib=libc++ -Ideps/glfw-3.1/include/ -Ideps -c 

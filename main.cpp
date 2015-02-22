@@ -1,3 +1,5 @@
+// Created by Jeremy Cowles, 2015
+
 #include "audio.h"
 
 #include "lodepng/lodepng.h"
@@ -5,6 +7,8 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+
+#include <cstdlib>  // for rand
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -34,6 +38,19 @@ _KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 
 GLuint _vao = 0;
 GLuint _quadBuffer = 0;
+
+struct QuadProgram {
+    GLuint program;
+    GLint iRandomLoc;
+    GLint iResolutionLoc;
+    GLint iGlobalTimeLoc;
+    GLint iMouseLoc;
+    GLint iChannel0Loc;
+    GLint iChannel1Loc;
+};
+QuadProgram _shaderToy;
+QuadProgram _film;
+GLuint _texBuffers[2];
 
 static void
 _GLCheckError(std::string const & where = "")
@@ -117,71 +134,34 @@ _GLLinkProgram(char const* vsSrc, char const* fsSrc) {
     return program;
 }
 
-struct {
-    GLuint program;
-    GLint iResolutionLoc;
-    GLint iGlobalTimeLoc;
-    GLint iMouseLoc;
-    GLint iChannel0Loc;
-} _shaderToy;
-
-static void 
-_LinkSTProgram()
+static std::string 
+_ReadFile(std::string path)
 {
-    #define GLSL_VERSION_DEFINE "#version 410\n"
-
-    static const char *vsSrc =
-        GLSL_VERSION_DEFINE
-        "layout(location=0) in vec2 position;\n"
-        "out vec4 fragColor;\n"
-        "out vec2 uvCoord;\n"
-        "void main() {\n"
-        "  fragColor = vec4((position + 1)*.5*0.75, 0.0, 1);\n"
-        "  uvCoord = (position + 1)*.5;\n"
-        "  gl_Position = vec4(position, 0.0, 1);\n"
-        "}\n";
-
-    /* Required ShaderToy inputs:
-    uniform vec3      iResolution;           // viewport resolution (in pixels)
-    uniform float     iGlobalTime;           // shader playback time (in seconds)
-    uniform vec4      iMouse;                // mouse pixel coords. xy: current (if MLB down), zw: click
-    uniform sampler2D iChannel0;           // input channel. XX = 2D/Cube
-    */
-    
-    static const std::string fsSrc =
-        GLSL_VERSION_DEFINE
-        "in vec4 fragColor;\n"
-        "in vec2 uvCoord;\n"
-        "out vec4 color;\n"
-        "uniform vec3      iResolution;           // viewport resolution (in pixels)\n"
-        "uniform float     iGlobalTime;           // shader playback time (in seconds)\n"
-        "//uniform vec4      iMouse;                // mouse pixel coords. xy: current (if MLB down), zw: click\n"
-        "uniform sampler2D iChannel0;           // input channel. XX = 2D/Cube\n"
-
-        "//void main() {\n"
-        "//  color = fragColor + vec4(vec3(iGlobalTime*.1), 1.0);\n"
-        "//  color = vec4(vec3(texture(iChannel0, vec2(uvCoord.x, 1-uvCoord.y), 0).r), 1);\n"
-        "//  color = vec4(vec3(uvCoord, 0), 1);\n"
-        "//}\n";
-
-    std::string line;
     std::stringstream ss;
-    std::ifstream glslFile("dunes.glsl");
-    ss << fsSrc;
+    std::string line;
+    std::ifstream glslFile(path);
     if (glslFile.is_open()) {
-        #if 1
         while (getline(glslFile,line)) {
             ss << line << "\n";
         }
-        #endif
         glslFile.close();
     }
+    return ss.str();
+}
 
-    _shaderToy.program = _GLLinkProgram(vsSrc, ss.str().c_str());
-    _shaderToy.iResolutionLoc = glGetUniformLocation(_shaderToy.program, "iResolution");
-    _shaderToy.iGlobalTimeLoc = glGetUniformLocation(_shaderToy.program, "iGlobalTime");
-    _shaderToy.iChannel0Loc = glGetUniformLocation(_shaderToy.program, "iChannel0");
-    //_shaderToy.iMouseLoc = glGetUniformLocation(_shaderToy.program, "iMouse");
+static void 
+_LinkQuadProgram(std::string vs, std::string fs, QuadProgram* qp)
+{
+    vs = _ReadFile(vs); 
+    fs = _ReadFile(fs); 
+
+    qp->program = _GLLinkProgram(vs.c_str(), fs.c_str());
+    qp->iRandomLoc = glGetUniformLocation(qp->program, "iRandom");
+    qp->iResolutionLoc = glGetUniformLocation(qp->program, "iResolution");
+    qp->iGlobalTimeLoc = glGetUniformLocation(qp->program, "iGlobalTime");
+    qp->iChannel0Loc = glGetUniformLocation(qp->program, "iChannel0");
+    qp->iChannel1Loc = glGetUniformLocation(qp->program, "iChannel1");
+    //qp->iMouseLoc = glGetUniformLocation(qp->program, "iMouse");
 }
 
 static void
@@ -209,7 +189,8 @@ _GLInit()
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     _GLCheckError("BufferData");
 
-    _LinkSTProgram();
+    _LinkQuadProgram("quad.vs.glsl", "dunes.fs.glsl", &_shaderToy);
+    _LinkQuadProgram("quad.vs.glsl", "film.fs.glsl", &_film);
 }
 
 GLuint _fbo;
@@ -229,10 +210,13 @@ _InitFBO(GLsizei width, GLsizei height)
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                               GL_RENDERBUFFER, _rboDepth);
 
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _texBuffers[0], 0);
+    /*
     glBindRenderbuffer(GL_RENDERBUFFER, _rboColor);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                               GL_RENDERBUFFER, _rboColor);
+    */
 
     _GLCheckError("FBO");
 
@@ -288,15 +272,39 @@ _InitRandomTexture()
 
     GLuint tex = 0;
     glGenTextures(1, &tex);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    glActiveTexture(GL_TEXTURE0);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED,
                  GL_UNSIGNED_BYTE, &image[0]);
+}
+
+static void
+_InitFrameTextures(GLsizei width, GLsizei height)
+{
+    glActiveTexture(GL_TEXTURE1);
+    glGenTextures(2, &_texBuffers[0]);
+    float* mem = new float(width*height*sizeof(float)*4);
+    glBindTexture(GL_TEXTURE_2D, _texBuffers[0]);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
+                 GL_FLOAT, mem);
+
+    glBindTexture(GL_TEXTURE_2D, _texBuffers[1]);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
+                 GL_FLOAT, mem);
+
 }
 
 /* -------------------------------------------------------------------------- */
@@ -310,8 +318,6 @@ int main(void)
         exit(EXIT_FAILURE);
     _GLSetCoreProfile();
 
-    int width=1024, height=640;
-    int widthFbo=width/2, heightFbo=height/2;
     GLFWwindow* window;
     
     // Must match FBO samples to use glBlitFramebuffer
@@ -321,8 +327,8 @@ int main(void)
     // render resolution. This looks better and doesn't cause the window 
     // manager to freak out due to resolution changes.
     const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-    width = mode->width;
-    height = mode->height;
+    int width=mode->width, height=mode->height;
+    int widthFbo=width/2, heightFbo=(height/4);
     //window = glfwCreateWindow(width, height, "NVScene15", NULL, NULL);
     window = glfwCreateWindow(width, height, "NVScene15", glfwGetPrimaryMonitor(), NULL);
     if (!window) {
@@ -340,47 +346,82 @@ int main(void)
 
     _GLEWInit();
     _GLInit();
+    _InitFrameTextures(width, height);
     _InitFBO(widthFbo, heightFbo);
-    _InitRandomTexture();
+    _InitRandomTexture();                 // binds TEXTURE0
 
     glfwSetKeyCallback(window, _KeyCallback);
     glfwSwapInterval(0);
 
-    StartAudio();
+    //StartAudio();
+
+    srand(0);
     
+    double frameTime = 0.0, lastTime = 0.0;
+    size_t frameCnt = 0;
+    float ratio;
+    glfwGetFramebufferSize(window, &width, &height);
+    ratio = widthFbo / (float) heightFbo;
+
     while (!glfwWindowShouldClose(window))
     {
-        float ratio;
-        glfwGetFramebufferSize(window, &width, &height);
-        ratio = widthFbo / (float) heightFbo;
-
         glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
         glViewport(0, 0, widthFbo, heightFbo);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(_shaderToy.program);
         glUniform1f(_shaderToy.iGlobalTimeLoc, glfwGetTime());
         glUniform1i(_shaderToy.iChannel0Loc, 0);
+        glUniform1i(_shaderToy.iChannel1Loc, 0);
         glUniform3f(_shaderToy.iResolutionLoc, widthFbo, heightFbo, 1.0);
+        glUniform1f(_shaderToy.iRandomLoc, rand()/float(RAND_MAX));
         glBindBuffer(GL_ARRAY_BUFFER, _quadBuffer);
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(/*attrib*/0, /*vec3*/2, GL_FLOAT, /*normalized*/GL_FALSE, 
                                 /*stride*/0, 0);
         glDrawArrays(GL_TRIANGLES, 0, 3*2);
         _GLCheckError("draw");
-        glDisableVertexAttribArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glUseProgram(0);
+        //glDisableVertexAttribArray(0);
+        //glBindBuffer(GL_ARRAY_BUFFER, 0);
+        //glUseProgram(0);
 
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // Apply film effect and blit to screen
+        glViewport(0, 0, width, height);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glUseProgram(_film.program);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, _texBuffers[0]);
+        glUniform1f(_film.iGlobalTimeLoc, glfwGetTime());
+        glUniform1i(_film.iChannel0Loc, 0);
+        glUniform1i(_film.iChannel1Loc, 1);
+        glUniform3f(_film.iResolutionLoc, widthFbo, heightFbo, 1.0);
+        glUniform1f(_film.iRandomLoc, rand()/float(RAND_MAX));
+        glDrawArrays(GL_TRIANGLES, 0, 3*2);
+        _GLCheckError("draw2");
+
+        #if 0
+        // Blit to screen with no effect.
         glBindFramebuffer(GL_READ_FRAMEBUFFER, _fbo);
         _GLCheckError("blitbind");
-        glBlitFramebuffer(0,0,widthFbo,heightFbo,0,0,width,height,GL_COLOR_BUFFER_BIT,GL_LINEAR);
+        glBlitFramebuffer(0,0,widthFbo,heightFbo,0,height*.25,width,height*.75,GL_COLOR_BUFFER_BIT,GL_LINEAR);
         _GLCheckError("blit");
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        #endif
+
         glfwSwapBuffers(window);
         glfwPollEvents();
+        frameCnt++;
+        frameTime += glfwGetTime() - lastTime;
+        lastTime = glfwGetTime();
+        if (frameCnt % 60 == 0)
+            std::cout << "FPS: " << (frameCnt / frameTime) << "\n";
     }
     glfwDestroyWindow(window);
     glfwTerminate();

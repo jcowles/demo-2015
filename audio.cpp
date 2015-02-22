@@ -66,9 +66,9 @@ void StartAudio(void)
     // 
     // Load the music from source file
     //
-    music = Mix_LoadMUS("moonlight-remix.ogg");
+    music = Mix_LoadMUS("audio.ogg");
     if(!music) {
-        fprintf(stderr, "Mix_LoadMUS(\"moonlight-remix.ogg\"): %s\n", Mix_GetError());
+        fprintf(stderr, "Mix_LoadMUS(\"audio.ogg\"): %s\n", Mix_GetError());
         exit(1);
     }
 

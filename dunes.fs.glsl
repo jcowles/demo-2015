@@ -2,6 +2,18 @@
 // Adapted from Elevated, which was created by inigo quilez - iq/2013
 // License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
 
+#version 410 core
+
+in vec4 fragColor;
+in vec2 uvCoord;
+out vec4 color;
+uniform float     iRandom;
+uniform vec3      iResolution;           // viewport resolution (in pixels)
+uniform float     iGlobalTime;           // shader playback time (in seconds)
+//uniform vec4      iMouse;                // mouse pixel coords. xy: current (if MLB down), zw: click
+uniform sampler2D iChannel0;
+uniform sampler2D iChannel1;
+
 // value noise, and its analytical derivatives
 vec3 noised( in vec2 x )
 {
@@ -86,21 +98,36 @@ float city( in vec3 p )
     vec3 n01 = cityNoise(p);
     
     // city is below sea level
-    p.y -= desert((floor(p.xz/cityScale) + .5) * cityScale); 
-
-    //p.y += 40.;
+    #if 0
+        p.y -= desert((floor(p.xz/cityScale) + .5) * cityScale); 
+    #else
+        p.y += 50.;
+    #endif
     
-    //p.xz = mod(p.xz + n01.xz * 10., scale);
-    vec2 m = (.5*n01.xz+.5) * cityScale;
-    m = vec2(cityScale,cityScale);
-    p.xz = mod(p.xz, m) - 1. * m;
+    #if 0
+        p.xz = mod(p.xz + n01.xz * 10., cityScale);
+    #else
+        #if 1
+            // more dense
+            vec2 m = (.5*n01.xz+.5) * cityScale;
+        #else
+            // uniform, but less glitchy
+            vec2 m = vec2(cityScale,cityScale);
+        #endif
+        p.xz = mod(p.xz, m) - 1. * m;
+    #endif
     //p.xz += (.5*n01.xz+.5) * 10.;
     
     //p -= vec3(50.,0.,30.);
     
+    #if 1
+    // Add variation to buildings, seems like they are clipping the
+    // modded area.
     vec3 b = vec3(10.+n01.x*20.,13. + n01.y*10.,10. + n01.z*20.);
+    #else
     // This will fix it:
-    b = vec3(14.,13.,15.);
+    vec3 b = vec3(14.,13.,15.);
+    #endif
     
 	return udBox(p, b);
 }
@@ -171,7 +198,6 @@ vec3 calcNormal( in vec3 pos, float t, int prim )
                        : sandNormal(pos,t);
 }
 
-
 vec3 camPath( float time )
 {
     time -= .5;
@@ -201,7 +227,7 @@ void main( void )
 	vec3 light1 = normalize( vec3(-0.8,0.4,-2.0) );
 
     // camera position
-	vec3 ro = vec3(0); ro = camPath( time );
+	vec3 ro = vec3(0); ro = camPath(time);
 	vec3 ta = vec3(100,0,0); ta = camPath( time + 3.0 );
 	//ro.y = desert( ro.xz ) + 110.0;
     ro.y = max(ro.y, desert(ro.xz)+10.0);
