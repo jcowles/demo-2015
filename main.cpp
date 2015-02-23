@@ -190,7 +190,7 @@ _GLInit()
     _GLCheckError("BufferData");
 
     _LinkQuadProgram("quad.vs.glsl", "dunes.fs.glsl", &_shaderToy);
-    _LinkQuadProgram("quad.vs.glsl", "film.fs.glsl", &_film);
+    _LinkQuadProgram("aspect.vs.glsl", "film.fs.glsl", &_film);
 }
 
 GLuint _fbo;
@@ -292,16 +292,16 @@ _InitFrameTextures(GLsizei width, GLsizei height)
     glBindTexture(GL_TEXTURE_2D, _texBuffers[0]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
                  GL_FLOAT, mem);
 
     glBindTexture(GL_TEXTURE_2D, _texBuffers[1]);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
                  GL_FLOAT, mem);
 
@@ -328,7 +328,16 @@ int main(void)
     // manager to freak out due to resolution changes.
     const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
     int width=mode->width, height=mode->height;
-    int widthFbo=width/2, heightFbo=(height/4);
+    //int width=960, height=400;
+    //int width=1024, height=768;
+    //int width=1920, height=800;
+
+    // PI is a nice aspect ratio
+    float aspect = 3.14159265359;
+    float scale = 0.5;
+    int widthFbo=width*scale, 
+        heightFbo=((width*scale)*(1/aspect));
+
     //window = glfwCreateWindow(width, height, "NVScene15", NULL, NULL);
     window = glfwCreateWindow(width, height, "NVScene15", glfwGetPrimaryMonitor(), NULL);
     if (!window) {
@@ -359,9 +368,8 @@ int main(void)
     
     double frameTime = 0.0, lastTime = 0.0;
     size_t frameCnt = 0;
-    float ratio;
     glfwGetFramebufferSize(window, &width, &height);
-    ratio = widthFbo / (float) heightFbo;
+    //std::cout << width << " x " << height << "\n";
 
     while (!glfwWindowShouldClose(window))
     {
@@ -420,8 +428,11 @@ int main(void)
         frameCnt++;
         frameTime += glfwGetTime() - lastTime;
         lastTime = glfwGetTime();
-        if (frameCnt % 60 == 0)
+        if (frameCnt % 30 == 0) {
             std::cout << "FPS: " << (frameCnt / frameTime) << "\n";
+            frameTime = 0;
+            frameCnt = 0;
+        }
     }
     glfwDestroyWindow(window);
     glfwTerminate();
